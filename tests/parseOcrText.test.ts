@@ -53,4 +53,55 @@ describe('parseOcrText', () => {
     expect(parsed.sessions[0].session).toBe(session);
     expect(parsed.sessions[0].records.get(5)?.chunkBytes).toEqual(chunk);
   });
+
+  it('accepts grouped OCR32 data rendered with spaces', () => {
+    const groupedData = data.match(/.{1,4}/g)?.join(' ') ?? data;
+    const parsed = parseOcrText([session, index, total, len, crc32, groupedData].join(' '));
+
+    expect(parsed.parsedLines).toBe(1);
+    expect(parsed.sessions[0].records.get(5)?.chunkBytes).toEqual(chunk);
+  });
+
+  it('repairs a single dropped trailing CRC character only when CRC validation passes', () => {
+    const parsed = parseOcrText([session, index, total, len, crc32.slice(0, 7), data].join(' '));
+
+    expect(parsed.parsedLines).toBe(1);
+    expect(parsed.sessions[0].records.get(5)?.crc32).toBe(crc32);
+  });
+
+  it('repairs a single dropped CRC character in the middle only when CRC validation passes', () => {
+    const damagedCrc = crc32.slice(0, 3) + crc32.slice(4);
+    const parsed = parseOcrText([session, index, total, len, damagedCrc, data].join(' '));
+
+    expect(parsed.parsedLines).toBe(1);
+    expect(parsed.sessions[0].records.get(5)?.crc32).toBe(crc32);
+  });
+
+  it('repairs one inserted OCR32 data character in sheet-style rows only when CRC validation passes', () => {
+    const damagedData = data.slice(0, 12) + '0' + data.slice(12);
+    const text = [
+      [session, index, total, len, crc32].join(' '),
+      damagedData.slice(0, 48).match(/.{1,2}/g)?.join(' '),
+      damagedData.slice(48).match(/.{1,2}/g)?.join(' '),
+    ].join('\n');
+
+    const parsed = parseOcrText(text);
+
+    expect(parsed.parsedLines).toBe(1);
+    expect(parsed.sessions[0].records.get(5)?.chunkBytes).toEqual(chunk);
+  });
+
+  it('repairs one missing OCR32 data character in sheet-style rows only when CRC validation passes', () => {
+    const damagedData = data.slice(0, 12) + data.slice(13);
+    const text = [
+      [session, index, total, len, crc32].join(' '),
+      damagedData.slice(0, 48).match(/.{1,2}/g)?.join(' '),
+      damagedData.slice(48).match(/.{1,2}/g)?.join(' '),
+    ].join('\n');
+
+    const parsed = parseOcrText(text);
+
+    expect(parsed.parsedLines).toBe(1);
+    expect(parsed.sessions[0].records.get(5)?.chunkBytes).toEqual(chunk);
+  });
 });

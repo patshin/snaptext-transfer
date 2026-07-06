@@ -1,6 +1,7 @@
 export interface PreprocessOptions {
   maxWidth?: number;
   rotation?: 0 | 90 | 180 | 270;
+  cropMode?: 'full' | 'data-region';
 }
 
 function loadImage(file: File): Promise<HTMLImageElement> {
@@ -29,16 +30,17 @@ export async function preprocessImage(
 ): Promise<HTMLCanvasElement> {
   const maxWidth = options.maxWidth ?? 3600;
   const rotation = options.rotation ?? 0;
+  const cropMode = options.cropMode ?? 'full';
   const image = await loadImage(file);
   const scale = Math.min(1, maxWidth / image.naturalWidth);
   const sourceWidth = Math.max(1, Math.round(image.naturalWidth * scale));
   const sourceHeight = Math.max(1, Math.round(image.naturalHeight * scale));
   const size = rotatedSize(sourceWidth, sourceHeight, rotation);
 
-  const canvas = document.createElement('canvas');
+  let canvas = document.createElement('canvas');
   canvas.width = size.width;
   canvas.height = size.height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) {
     throw new Error('Unable to create preprocessing canvas.');
   }
@@ -58,6 +60,26 @@ export async function preprocessImage(
   }
   ctx.drawImage(image, 0, 0, sourceWidth, sourceHeight);
   ctx.restore();
+
+  if (cropMode === 'data-region') {
+    const cropX = Math.round(canvas.width * 0.04);
+    const cropY = Math.round(Math.min(canvas.height * 0.115, 560));
+    const cropWidth = Math.max(1, Math.round(canvas.width * 0.92));
+    const bottomPadding = Math.round(Math.min(canvas.height * 0.09, 520));
+    const cropHeight = Math.max(1, canvas.height - cropY - bottomPadding);
+    const cropped = document.createElement('canvas');
+    cropped.width = cropWidth;
+    cropped.height = cropHeight;
+    const croppedCtx = cropped.getContext('2d', { willReadFrequently: true });
+    if (!croppedCtx) {
+      throw new Error('Unable to create cropped preprocessing canvas.');
+    }
+    croppedCtx.fillStyle = '#ffffff';
+    croppedCtx.fillRect(0, 0, cropped.width, cropped.height);
+    croppedCtx.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+    canvas = cropped;
+    ctx = croppedCtx;
+  }
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;

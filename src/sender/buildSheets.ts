@@ -68,7 +68,14 @@ export interface BuiltSheets {
 }
 
 export function chunkBytesForProfile(profile: TransferProfile): number {
-  return Math.floor((profile.dataCharsPerLine * 5) / 8);
+  const nominalBytes = Math.floor((profile.dataCharsPerLine * 5) / 8);
+  if (profile.name === 'safe') {
+    return Math.min(nominalBytes, 24);
+  }
+  if (profile.name === 'balanced') {
+    return Math.min(nominalBytes, 32);
+  }
+  return Math.min(nominalBytes, 48);
 }
 
 async function sessionFromPackage(packageBytes: Uint8Array): Promise<string> {
