@@ -55,7 +55,7 @@ export async function recognizeImages(files: File[], options: RecognizeOptions =
   try {
     await worker.setParameters({
       tessedit_char_whitelist: OCR_WHITELIST,
-      tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+      tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
       preserve_interword_spaces: '1',
       user_defined_dpi: '300',
     });
