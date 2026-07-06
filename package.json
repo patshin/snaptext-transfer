@@ -1,0 +1,25 @@
+{
+  "name": "snaptext-transfer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Static browser-only OCR sheet transfer tool for user-owned text/code snippets.",
+  "scripts": {
+    "dev": "npm run copy-assets && vite --host 127.0.0.1",
+    "build": "npm run copy-assets && tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "copy-assets": "node scripts/copy-tesseract-assets.mjs"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
+    "fflate": "^0.8.2",
+    "tesseract.js": "^6.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.9"
+  }
+}
