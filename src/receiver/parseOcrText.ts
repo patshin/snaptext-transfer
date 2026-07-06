@@ -18,6 +18,11 @@ export interface ParsedOcrText {
   duplicateLines: number;
 }
 
+export interface ParseOcrTextOptions {
+  repairLength?: boolean;
+  repairSubstitutions?: boolean;
+}
+
 interface ParseCounters {
   parsedLines: number;
   duplicateLines: number;
@@ -72,7 +77,7 @@ function addParsedLine(
 function normalizeDecimalToken(text: string, width: number): string | null {
   let out = '';
   for (const rawChar of text.toUpperCase()) {
-    const char = rawChar === 'O' ? '0' : rawChar === 'I' || rawChar === 'L' ? '1' : rawChar;
+    const char = rawChar === 'O' || rawChar === 'Q' ? '0' : rawChar === 'I' || rawChar === 'L' ? '1' : rawChar;
     if (/[0-9]/.test(char)) {
       out += char;
     }
@@ -83,7 +88,7 @@ function normalizeDecimalToken(text: string, width: number): string | null {
 function normalizeHexCandidates(text: string): string[] {
   let out = '';
   for (const rawChar of text.toUpperCase()) {
-    const char = rawChar === 'O' ? '0' : rawChar === 'I' || rawChar === 'L' ? '1' : rawChar;
+    const char = rawChar === 'O' || rawChar === 'Q' ? '0' : rawChar === 'I' || rawChar === 'L' ? '1' : rawChar;
     if (/[0-9A-F]/.test(char)) {
       out += char;
     }
@@ -116,6 +121,27 @@ function ocr32CharsForBytes(byteLength: number): number {
   return Math.ceil((byteLength * 8) / 5);
 }
 
+const MAX_SINGLE_SUBSTITUTION_REPAIR_CHARS = 64;
+const OCR32_CONFUSIONS: Record<string, string[]> = {
+  '0': ['Q', 'D'],
+  '1': ['T'],
+  '2': ['Z'],
+  '5': ['S'],
+  '6': ['G'],
+  '8': ['B'],
+  B: ['8'],
+  D: ['0'],
+  G: ['6'],
+  M: ['N'],
+  N: ['M'],
+  Q: ['0'],
+  S: ['5'],
+  T: ['1'],
+  V: ['Y'],
+  Y: ['V'],
+  Z: ['2'],
+};
+
 function tokenize(text: string): string[] {
   return text
     .split(/\s+/)
@@ -125,6 +151,16 @@ function tokenize(text: string): string[] {
 
 function parseHeader(tokens: string[], offset: number): HeaderCandidate | null {
   return parseHeaderCandidates(tokens, offset)[0] ?? null;
+}
+
+function looksLikeEncodedLine(tokens: string[]): boolean {
+  return parseHeaderCandidates(tokens, 0).length > 0 || (
+    tokens.length >= 6 &&
+    normalizeSessionToken(tokens[0]) !== null &&
+    normalizeDecimalToken(tokens[1], 6) !== null &&
+    normalizeDecimalToken(tokens[2], 6) !== null &&
+    normalizeDecimalToken(tokens[3], 4) !== null
+  );
 }
 
 function parseHeaderCandidates(tokens: string[], offset: number): HeaderCandidate[] {
@@ -162,19 +198,42 @@ function parseCandidate(header: HeaderCandidate, data: string): ParsedLine {
   return parseLine(candidate);
 }
 
-function candidateDataStrings(data: string, neededChars: number): string[] {
+function candidateDataStrings(
+  data: string,
+  neededChars: number,
+  options: Required<ParseOcrTextOptions>,
+): string[] {
   const candidates = new Set<string>();
+  const addSingleSubstitutionRepairs = (candidate: string): void => {
+    if (!options.repairSubstitutions) {
+      return;
+    }
+    if (candidate.length > MAX_SINGLE_SUBSTITUTION_REPAIR_CHARS) {
+      return;
+    }
+    for (let index = 0; index < candidate.length; index += 1) {
+      for (const char of OCR32_CONFUSIONS[candidate[index]] ?? []) {
+        if (char !== candidate[index] && OCR32_ALPHABET.includes(char)) {
+          candidates.add(candidate.slice(0, index) + char + candidate.slice(index + 1));
+        }
+      }
+    }
+  };
+
   if (data.length >= neededChars) {
     const prefix = data.slice(0, neededChars);
     candidates.add(prefix);
+    if (data.length === neededChars) {
+      addSingleSubstitutionRepairs(prefix);
+    }
 
-    if (data.length > neededChars) {
+    if (options.repairLength && data.length > neededChars) {
       const repairWindow = data.slice(0, neededChars + 1);
       for (let index = 0; index < repairWindow.length; index += 1) {
         candidates.add(repairWindow.slice(0, index) + repairWindow.slice(index + 1));
       }
     }
-  } else if (neededChars - data.length === 1) {
+  } else if (options.repairLength && neededChars - data.length === 1) {
     for (let index = 0; index <= data.length; index += 1) {
       for (const char of OCR32_ALPHABET) {
         candidates.add(data.slice(0, index) + char + data.slice(index));
@@ -184,14 +243,18 @@ function candidateDataStrings(data: string, neededChars: number): string[] {
   return Array.from(candidates);
 }
 
-function tryParseHeaderWithData(headers: HeaderCandidate[], data: string): ParsedLine | null {
+function tryParseHeaderWithData(
+  headers: HeaderCandidate[],
+  data: string,
+  options: Required<ParseOcrTextOptions>,
+): ParsedLine | null {
   if (headers.length === 0) {
     return null;
   }
   const neededChars = ocr32CharsForBytes(headers[0].byteLength);
   let sawCrcFailure = false;
 
-  for (const dataCandidate of candidateDataStrings(data, neededChars)) {
+  for (const dataCandidate of candidateDataStrings(data, neededChars, options)) {
     for (const header of headers) {
       try {
         return parseCandidate(header, dataCandidate);
@@ -211,7 +274,11 @@ function tryParseHeaderWithData(headers: HeaderCandidate[], data: string): Parse
   return null;
 }
 
-function tryParseTokenStreamAfterHeader(tokens: string[], offset: number): { line: ParsedLine; nextOffset: number } | null {
+function tryParseTokenStreamAfterHeader(
+  tokens: string[],
+  offset: number,
+  options: Required<ParseOcrTextOptions>,
+): { line: ParsedLine; nextOffset: number } | null {
   const headers = parseHeaderCandidates(tokens, offset);
   if (headers.length === 0) {
     return null;
@@ -228,7 +295,7 @@ function tryParseTokenStreamAfterHeader(tokens: string[], offset: number): { lin
     return null;
   }
   try {
-    const line = tryParseHeaderWithData(headers, data);
+    const line = tryParseHeaderWithData(headers, data, options);
     if (line) {
       return {
         line,
@@ -248,7 +315,11 @@ function tryParseTokenStreamAfterHeader(tokens: string[], offset: number): { lin
   return null;
 }
 
-function tryParseTokenStreamBeforeHeader(tokens: string[], offset: number): { line: ParsedLine; nextOffset: number } | null {
+function tryParseTokenStreamBeforeHeader(
+  tokens: string[],
+  offset: number,
+  options: Required<ParseOcrTextOptions>,
+): { line: ParsedLine; nextOffset: number } | null {
   const headers = parseHeaderCandidates(tokens, offset + 1);
   if (headers.length === 0) {
     return null;
@@ -260,7 +331,7 @@ function tryParseTokenStreamBeforeHeader(tokens: string[], offset: number): { li
   }
   let sawCrcFailure = false;
   try {
-    const line = tryParseHeaderWithData(headers, data);
+    const line = tryParseHeaderWithData(headers, data, options);
     if (line) {
       return {
         line,
@@ -280,7 +351,12 @@ function tryParseTokenStreamBeforeHeader(tokens: string[], offset: number): { li
   return null;
 }
 
-function parseLineBlocks(text: string, sessions: Map<string, SessionParse>, counters: ParseCounters): number {
+function parseLineBlocks(
+  text: string,
+  sessions: Map<string, SessionParse>,
+  counters: ParseCounters,
+  options: Required<ParseOcrTextOptions>,
+): number {
   const lines = text.split(/\r?\n/).map((line) => line.trim());
   let crcFailures = 0;
 
@@ -308,7 +384,7 @@ function parseLineBlocks(text: string, sessions: Map<string, SessionParse>, coun
     }
 
     try {
-      const parsed = tryParseHeaderWithData(headers, data);
+      const parsed = tryParseHeaderWithData(headers, data, options);
       if (parsed) {
         addParsedLine(sessions, parsed, counters, false);
       }
@@ -322,15 +398,25 @@ function parseLineBlocks(text: string, sessions: Map<string, SessionParse>, coun
   return crcFailures;
 }
 
-function parseTokenStream(text: string, sessions: Map<string, SessionParse>, counters: ParseCounters): number {
+function parseTokenStream(
+  text: string,
+  sessions: Map<string, SessionParse>,
+  counters: ParseCounters,
+  options: Required<ParseOcrTextOptions>,
+): number {
   const tokens = tokenize(text);
+  const tokenStreamOptions: Required<ParseOcrTextOptions> = {
+    ...options,
+    repairLength: false,
+    repairSubstitutions: false,
+  };
   let crcFailures = 0;
   let offset = 0;
 
   while (offset < tokens.length) {
     let parsed: { line: ParsedLine; nextOffset: number } | null = null;
     try {
-      parsed = tryParseTokenStreamAfterHeader(tokens, offset);
+      parsed = tryParseTokenStreamAfterHeader(tokens, offset, tokenStreamOptions);
     } catch (error) {
       if (error instanceof LineFormatError && error.code === 'crc') {
         crcFailures += 1;
@@ -338,7 +424,7 @@ function parseTokenStream(text: string, sessions: Map<string, SessionParse>, cou
     }
     if (!parsed) {
       try {
-        parsed = tryParseTokenStreamBeforeHeader(tokens, offset);
+        parsed = tryParseTokenStreamBeforeHeader(tokens, offset, tokenStreamOptions);
       } catch (error) {
         if (error instanceof LineFormatError && error.code === 'crc') {
           crcFailures += 1;
@@ -356,7 +442,11 @@ function parseTokenStream(text: string, sessions: Map<string, SessionParse>, cou
   return crcFailures;
 }
 
-export function parseOcrText(text: string): ParsedOcrText {
+export function parseOcrText(text: string, options: ParseOcrTextOptions = {}): ParsedOcrText {
+  const normalizedOptions: Required<ParseOcrTextOptions> = {
+    repairLength: options.repairLength ?? true,
+    repairSubstitutions: options.repairSubstitutions ?? true,
+  };
   const sessions = new Map<string, SessionParse>();
   const counters: ParseCounters = {
     parsedLines: 0,
@@ -376,14 +466,14 @@ export function parseOcrText(text: string): ParsedOcrText {
     } catch (error) {
       if (error instanceof LineFormatError && error.code === 'crc') {
         crcFailures += 1;
-      } else {
+      } else if (looksLikeEncodedLine(tokenize(line))) {
         invalidLines += 1;
       }
     }
   }
 
-  crcFailures += parseTokenStream(text, sessions, counters);
-  crcFailures += parseLineBlocks(text, sessions, counters);
+  crcFailures += parseTokenStream(text, sessions, counters, normalizedOptions);
+  crcFailures += parseLineBlocks(text, sessions, counters, normalizedOptions);
 
   return {
     sessions: Array.from(sessions.values()).sort((a, b) => b.records.size - a.records.size),

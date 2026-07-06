@@ -10,6 +10,21 @@ const line = encodeChunkLine({
   chunkBytes: chunk,
 });
 const [session, index, total, len, crc32, data] = line.split(' ');
+const repairChunk = new Uint8Array(Array.from({ length: 32 }, (_, byteIndex) => (byteIndex * 29 + 7) & 0xff));
+const repairLine = encodeChunkLine({
+  session: 'XZQSVC',
+  index: 6,
+  total: 21,
+  chunkBytes: repairChunk,
+});
+const [
+  repairSession,
+  repairIndex,
+  repairTotal,
+  repairLen,
+  repairCrc32,
+  repairData,
+] = repairLine.split(' ');
 
 describe('parseOcrText', () => {
   it('ignores sheet header and footer while parsing valid OCR lines', () => {
@@ -103,5 +118,21 @@ describe('parseOcrText', () => {
 
     expect(parsed.parsedLines).toBe(1);
     expect(parsed.sessions[0].records.get(5)?.chunkBytes).toEqual(chunk);
+  });
+
+  it('repairs one substituted OCR32 data character only when CRC validation passes', () => {
+    const replacementIndex = repairData.indexOf('8');
+    expect(replacementIndex).toBeGreaterThanOrEqual(0);
+    const damagedData = repairData.slice(0, replacementIndex) + 'B' + repairData.slice(replacementIndex + 1);
+    const text = [
+      [repairSession, repairIndex, repairTotal, repairLen, repairCrc32].join(' '),
+      damagedData.slice(0, 48).match(/.{1,2}/g)?.join(' '),
+      damagedData.slice(48).match(/.{1,2}/g)?.join(' '),
+    ].join('\n');
+
+    const parsed = parseOcrText(text);
+
+    expect(parsed.parsedLines).toBe(1);
+    expect(parsed.sessions[0].records.get(6)?.chunkBytes).toEqual(repairChunk);
   });
 });

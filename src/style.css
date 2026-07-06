@@ -389,6 +389,7 @@ textarea {
 
 .sheet-preview {
   position: relative;
+  box-sizing: border-box;
   width: 96rem;
   min-height: 130rem;
   margin: 0 auto;
@@ -403,8 +404,19 @@ textarea {
   width: 100vw;
   min-height: 100vh;
   margin: 0;
+  padding: 2rem 3rem;
   overflow: auto;
   box-shadow: none;
+}
+
+.sheet-preview:fullscreen .sheet-preview__header,
+.sheet-preview:fullscreen .sheet-preview__footer,
+.sheet-preview:fullscreen .marker {
+  display: none;
+}
+
+.sheet-preview:fullscreen .sheet-preview__lines {
+  margin: 0;
 }
 
 .marker {

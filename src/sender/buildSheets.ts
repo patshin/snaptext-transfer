@@ -75,7 +75,7 @@ export function chunkBytesForProfile(profile: TransferProfile): number {
   if (profile.name === 'balanced') {
     return Math.min(nominalBytes, 32);
   }
-  return Math.min(nominalBytes, 48);
+  return Math.min(nominalBytes, 32);
 }
 
 async function sessionFromPackage(packageBytes: Uint8Array): Promise<string> {

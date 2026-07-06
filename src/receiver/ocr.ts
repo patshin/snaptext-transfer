@@ -39,7 +39,7 @@ function heuristicLineScore(text: string): number {
 }
 
 function scoreOcrText(text: string): number {
-  const parsed = parseOcrText(text);
+  const parsed = parseOcrText(text, { repairSubstitutions: false });
   const bestSession = parsed.sessions[0];
   const received = bestSession?.records.size ?? 0;
   return received * 100_000 + parsed.parsedLines * 1_000 + heuristicLineScore(text) - parsed.crcFailures * 2;
