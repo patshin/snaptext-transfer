@@ -27,7 +27,7 @@ export async function preprocessImage(
   file: File,
   options: PreprocessOptions = {},
 ): Promise<HTMLCanvasElement> {
-  const maxWidth = options.maxWidth ?? 2200;
+  const maxWidth = options.maxWidth ?? 3600;
   const rotation = options.rotation ?? 0;
   const image = await loadImage(file);
   const scale = Math.min(1, maxWidth / image.naturalWidth);
@@ -62,12 +62,20 @@ export async function preprocessImage(
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
   let sum = 0;
+  let nearBinaryPixels = 0;
   for (let i = 0; i < data.length; i += 4) {
-    sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    sum += gray;
+    if (gray < 35 || gray > 220) {
+      nearBinaryPixels += 1;
+    }
   }
-  const average = sum / (data.length / 4);
+  const pixelCount = data.length / 4;
+  const average = sum / pixelCount;
+  const nearBinaryRatio = nearBinaryPixels / pixelCount;
   const invert = average < 110;
-  const threshold = invert ? 120 : 170;
+  const threshold = invert ? 120 : 165;
+  const shouldBinarize = nearBinaryRatio < 0.92;
 
   for (let i = 0; i < data.length; i += 4) {
     let gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
@@ -75,7 +83,7 @@ export async function preprocessImage(
       gray = 255 - gray;
     }
     gray = Math.max(0, Math.min(255, (gray - 128) * 1.35 + 128));
-    const value = gray > threshold ? 255 : 0;
+    const value = shouldBinarize ? (gray > threshold ? 255 : 0) : gray;
     data[i] = value;
     data[i + 1] = value;
     data[i + 2] = value;

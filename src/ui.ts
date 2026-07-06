@@ -323,6 +323,10 @@ async function runOcr(root: HTMLElement): Promise<void> {
     ocrText.value = ocrText.value ? `${ocrText.value}\n${text}` : text;
     setStatus(status, 'OCR finished. Parsing recognized text...', 'ok');
     parseDecodeText(root);
+    const session = selectedSession();
+    if (session && isSessionComplete(session) && query<HTMLInputElement>(root, '#receivePassphrase').value) {
+      await recoverText(root);
+    }
   } catch (error) {
     setStatus(status, error instanceof Error ? error.message : 'OCR failed.', 'error');
   } finally {

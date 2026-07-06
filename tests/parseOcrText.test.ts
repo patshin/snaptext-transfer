@@ -12,6 +12,30 @@ const line = encodeChunkLine({
 const [session, index, total, len, crc32, data] = line.split(' ');
 
 describe('parseOcrText', () => {
+  it('ignores sheet header and footer while parsing valid OCR lines', () => {
+    const chunks = Array.from({ length: 4 }, (_, chunkIndex) => (
+      new Uint8Array(Array.from({ length: 60 }, (_, byteIndex) => (chunkIndex * 43 + byteIndex * 17 + 9) & 0xff))
+    ));
+    const lines = chunks.map((chunkBytes, index) => encodeChunkLine({
+      session: 'XZQSVC',
+      index,
+      total: chunks.length,
+      chunkBytes,
+    }));
+    const text = [
+      'SNAPTEXT v1',
+      'session XZQSVC        page 171        Balanced profile - 96 chars line',
+      ...lines,
+      'Only scan with snaptext-transfer Encrypted yes',
+    ].join('\n');
+
+    const parsed = parseOcrText(text);
+
+    expect(parsed.parsedLines).toBe(4);
+    expect(parsed.sessions[0].records.size).toBe(4);
+    expect(parsed.crcFailures).toBe(0);
+  });
+
   it('reconstructs a record when OCR splits fields onto separate lines', () => {
     const text = [session.toLowerCase(), index, total, len, crc32, data.slice(0, 40), data.slice(40)].join('\n\n');
     const parsed = parseOcrText(text);

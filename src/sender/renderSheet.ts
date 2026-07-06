@@ -1,13 +1,14 @@
 import { zipSync } from 'fflate';
 import type { OcrSheet } from './buildSheets';
 
-const CANVAS_WIDTH = 2200;
-const CANVAS_HEIGHT = 3000;
-const MARGIN_X = 150;
-const HEADER_Y = 150;
-const BODY_Y = 390;
-const FOOTER_Y = 2870;
-const MARKER_SIZE = 86;
+const CANVAS_WIDTH = 3600;
+const CANVAS_HEIGHT = 5000;
+const MARGIN_X = 220;
+const HEADER_Y = 220;
+const BODY_Y = 620;
+const FOOTER_Y = 4740;
+const MARKER_SIZE = 120;
+const MONO_FONT = '"Courier New", Courier, monospace';
 
 export function renderSheetElement(sheet: OcrSheet, encrypted: boolean): HTMLElement {
   const root = document.createElement('article');
@@ -63,36 +64,36 @@ export function createSheetCanvas(sheet: OcrSheet, encrypted: boolean): HTMLCanv
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   ctx.fillStyle = '#000000';
-  drawMarker(ctx, 54, 54);
-  drawMarker(ctx, CANVAS_WIDTH - MARKER_SIZE - 54, 54);
-  drawMarker(ctx, 54, CANVAS_HEIGHT - MARKER_SIZE - 54);
-  drawMarker(ctx, CANVAS_WIDTH - MARKER_SIZE - 54, CANVAS_HEIGHT - MARKER_SIZE - 54);
+  drawMarker(ctx, 82, 82);
+  drawMarker(ctx, CANVAS_WIDTH - MARKER_SIZE - 82, 82);
+  drawMarker(ctx, 82, CANVAS_HEIGHT - MARKER_SIZE - 82);
+  drawMarker(ctx, CANVAS_WIDTH - MARKER_SIZE - 82, CANVAS_HEIGHT - MARKER_SIZE - 82);
 
   ctx.textBaseline = 'top';
-  ctx.font = '700 56px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.font = `700 88px ${MONO_FONT}`;
   ctx.fillText('SNAPTEXT v1', MARGIN_X, HEADER_Y);
-  ctx.font = '36px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-  ctx.fillText(`session ${sheet.session}`, MARGIN_X, HEADER_Y + 70);
-  ctx.fillText(`page ${sheet.pageNumber}/${sheet.pageCount}`, MARGIN_X + 520, HEADER_Y + 70);
+  ctx.font = `54px ${MONO_FONT}`;
+  ctx.fillText(`session ${sheet.session}`, MARGIN_X, HEADER_Y + 112);
+  ctx.fillText(`page ${sheet.pageNumber}/${sheet.pageCount}`, MARGIN_X + 820, HEADER_Y + 112);
   ctx.fillText(
     `${sheet.profile.label} profile · ${sheet.profile.dataCharsPerLine} chars/line`,
-    MARGIN_X + 920,
-    HEADER_Y + 70,
+    MARGIN_X + 1500,
+    HEADER_Y + 112,
   );
   if (sheet.retransmit) {
-    ctx.fillText('retransmit set', MARGIN_X, HEADER_Y + 122);
+    ctx.fillText('retransmit set', MARGIN_X, HEADER_Y + 190);
   }
 
   const longestLine = Math.max(...sheet.lines.map((entry) => entry.line.length), 1);
   const usableWidth = CANVAS_WIDTH - MARGIN_X * 2;
-  const fontSize = Math.floor(Math.min(sheet.profile.fontSize * 1.55, usableWidth / (longestLine * 0.62)));
-  const lineHeight = Math.ceil(fontSize * 1.42);
-  ctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+  const fontSize = Math.floor(Math.min(sheet.profile.fontSize * 2.25, usableWidth / (longestLine * 0.56)));
+  const lineHeight = Math.ceil(fontSize * 1.48);
+  ctx.font = `600 ${fontSize}px ${MONO_FONT}`;
   for (let i = 0; i < sheet.lines.length; i += 1) {
     ctx.fillText(sheet.lines[i].line, MARGIN_X, BODY_Y + i * lineHeight);
   }
 
-  ctx.font = '32px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.font = `44px ${MONO_FONT}`;
   ctx.fillText(
     `Only scan with snaptext-transfer. Encrypted: ${encrypted ? 'yes' : 'no'}.`,
     MARGIN_X,

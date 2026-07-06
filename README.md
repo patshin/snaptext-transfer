@@ -99,7 +99,7 @@ The Vite config uses `base: './'`, so the built app works under a project path s
 8. Switch to **Decode / Receive on B**.
 9. Enter the same passphrase.
 10. Upload the PNG and click **OCR Images**.
-11. When all chunks are received, click **Recover**.
+11. If the passphrase was already entered, recovery runs automatically when all chunks are received; otherwise click **Recover**.
 12. Confirm the recovered text exactly equals the original input.
 
 Additional manual samples to verify:
